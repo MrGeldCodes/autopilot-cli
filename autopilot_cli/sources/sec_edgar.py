@@ -31,11 +31,11 @@ KNOWN_MANAGERS = {
     "ackman": HedgeFundManager(name="PERSHING SQUARE CAPITAL MANAGEMENT", cik="0001336528"),
     "dalio": HedgeFundManager(name="BRIDGEWATER ASSOCIATES LP", cik="0001350694"),
     "druckenmiller": HedgeFundManager(name="DUQUESNE FAMILY OFFICE LLC", cik="0001536411"),
-    "tepper": HedgeFundManager(name="APPALOOSA MANAGEMENT LP", cik="0001006438"),
+    "tepper": HedgeFundManager(name="APPALOOSA LP", cik="0001656456"),
     "cohen": HedgeFundManager(name="POINT72 ASSET MANAGEMENT LP", cik="0001603466"),
     "einhorn": HedgeFundManager(name="GREENLIGHT CAPITAL INC", cik="0001079114"),
     "soros": HedgeFundManager(name="SOROS FUND MANAGEMENT LLC", cik="0001029160"),
-    "icahn": HedgeFundManager(name="ICAHN CAPITAL LP", cik="0001412093"),
+    "icahn": HedgeFundManager(name="ICAHN CARL C", cik="0000921669"),
     "griffin": HedgeFundManager(name="CITADEL ADVISORS LLC", cik="0001423053"),
     "coleman": HedgeFundManager(name="TIGER GLOBAL MANAGEMENT LLC", cik="0001167483"),
     "loeb": HedgeFundManager(name="THIRD POINT LLC", cik="0001040273"),
@@ -113,6 +113,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
 
         xml_filenames = [
             "form13fInfoTable.xml",
+            "Form13FInfoTable.xml",
             "infotable.xml",
             "primary_doc.xml",
             "form13f_infotable.xml",
