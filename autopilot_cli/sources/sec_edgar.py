@@ -31,6 +31,14 @@ KNOWN_MANAGERS = {
     "ackman": HedgeFundManager(name="PERSHING SQUARE CAPITAL MANAGEMENT", cik="0001336528"),
     "dalio": HedgeFundManager(name="BRIDGEWATER ASSOCIATES LP", cik="0001350694"),
     "druckenmiller": HedgeFundManager(name="DUQUESNE FAMILY OFFICE LLC", cik="0001536411"),
+    "tepper": HedgeFundManager(name="APPALOOSA MANAGEMENT LP", cik="0001006438"),
+    "cohen": HedgeFundManager(name="POINT72 ASSET MANAGEMENT LP", cik="0001425274"),
+    "einhorn": HedgeFundManager(name="GREENLIGHT CAPITAL INC", cik="0001079114"),
+    "soros": HedgeFundManager(name="SOROS FUND MANAGEMENT LLC", cik="0001441135"),
+    "icahn": HedgeFundManager(name="ICAHN CARL C", cik="0000813762"),
+    "griffin": HedgeFundManager(name="CITADEL ADVISORS LLC", cik="0001423298"),
+    "coleman": HedgeFundManager(name="TIGER GLOBAL MANAGEMENT LLC", cik="0001167483"),
+    "loeb": HedgeFundManager(name="THIRD POINT LLC", cik="0001040273"),
 }
 
 
@@ -53,7 +61,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
             cik = manager_slug.zfill(10)  # CIKs are 10 digits with leading zeros
             manager = HedgeFundManager(name="Unknown", cik=cik)
         else:
-            raise ValueError(f"Unknown manager: {manager_slug}. Try 'burry', 'buffett', 'ackman', 'dalio', or provide a CIK number.")
+            raise ValueError(f"Unknown manager: {manager_slug}. Known managers: {', '.join(KNOWN_MANAGERS.keys())}. Or provide a CIK number.")
 
     headers = {
         "User-Agent": "AutopilotCLI/0.1.0 educational@example.com",

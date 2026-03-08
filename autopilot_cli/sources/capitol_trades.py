@@ -31,6 +31,78 @@ def _get_with_retry(url: str, headers: dict, retries: int = 3, timeout: float = 
     raise last_err
 
 
+def _resolve_bioguide_id(slug: str) -> Optional[str]:
+    """Resolve a politician slug (e.g. 'nancy-pelosi') to a bioguide ID (e.g. 'P000197').
+    
+    Scrapes the Capitol Trades politicians listing and matches by slug.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    slug_lower = slug.lower().strip()
+    
+    for page_num in range(1, 20):
+        try:
+            response = _get_with_retry(
+                f"https://www.capitoltrades.com/politicians?page={page_num}&pageSize=100",
+                headers,
+            )
+        except Exception:
+            break
+        
+        soup = BeautifulSoup(response.text, "lxml")
+        links = soup.find_all("a", href=re.compile(r"/politicians/[A-Z]"))
+        
+        if not links:
+            break
+        
+        for link in links:
+            href = link.get("href", "")
+            bioguide = href.split("/")[-1]
+            text = link.get_text(strip=True)
+            # Extract name (everything before party)
+            m = re.match(r"^(.+?)(Democrat|Republican|Independent)", text)
+            name = m.group(1).strip() if m else text[:60].strip()
+            candidate_slug = _name_to_slug(name)
+            if candidate_slug == slug_lower:
+                return bioguide
+        
+        if len(links) < 100:
+            break
+    
+    return None
+
+
+# Common slug -> bioguide cache for fast lookup
+_BIOGUIDE_CACHE: dict[str, str] = {
+    "nancy-pelosi": "P000197",
+    "tommy-tuberville": "T000278",
+    "dan-crenshaw": "C001120",
+    "marjorie-taylor-greene": "G000596",
+    "ro-khanna": "K000389",
+    "michael-mccaul": "M001157",
+    "josh-gottheimer": "G000583",
+    "mark-green": "G000590",
+    "austin-scott": "S001189",
+    "pat-fallon": "F000246",
+    "kevin-hern": "H001082",
+    "john-boozman": "B001236",
+}
+
+
+def _slug_to_bioguide(slug: str) -> Optional[str]:
+    """Convert slug to bioguide ID, using cache then dynamic lookup."""
+    slug_lower = slug.lower().strip()
+    if slug_lower in _BIOGUIDE_CACHE:
+        return _BIOGUIDE_CACHE[slug_lower]
+    
+    bioguide = _resolve_bioguide_id(slug_lower)
+    if bioguide:
+        _BIOGUIDE_CACHE[slug_lower] = bioguide
+    return bioguide
+
+
 async def _fetch_politician_trades_playwright(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
     """
     Fetch trades using Playwright for client-side rendering.
@@ -42,11 +114,15 @@ async def _fetch_politician_trades_playwright(politician_slug: str, page_size: i
     Returns:
         List of CongressionalTrade objects
     """
+    bioguide = _slug_to_bioguide(politician_slug)
+    if not bioguide:
+        return []
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
-        url = f"https://www.capitoltrades.com/trades?politician={politician_slug}&pageSize={page_size}"
+        url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
         
         try:
             await page.goto(url, wait_until="load", timeout=30000)
@@ -143,7 +219,10 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
             print(f"Warning: Playwright fetch failed, falling back to HTTP: {e}")
     
     # Fallback to HTTP-based approach
-    url = f"https://www.capitoltrades.com/trades?politician={politician_slug}&pageSize={page_size}"
+    bioguide = _slug_to_bioguide(politician_slug)
+    if not bioguide:
+        return []
+    url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -254,10 +333,10 @@ async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
-        url = f"https://www.capitoltrades.com/trades?ticker={ticker.upper()}&pageSize={page_size}"
+        url = f"https://www.capitoltrades.com/trades?issueTicker={ticker.upper()}&pageSize={page_size}"
         
         try:
-            await page.goto(url, wait_until="load", timeout=30000)
+            await page.goto(url, wait_until="networkidle", timeout=30000)
             await asyncio.sleep(2)  # Wait for data to load
             
             # Extract table data from page
@@ -350,7 +429,7 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
             print(f"Warning: Playwright fetch failed, falling back to HTTP: {e}")
     
     # Fallback to HTTP-based approach
-    url = f"https://www.capitoltrades.com/trades?ticker={ticker.upper()}&pageSize={page_size}"
+    url = f"https://www.capitoltrades.com/trades?issueTicker={ticker.upper()}&pageSize={page_size}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
