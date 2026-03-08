@@ -96,6 +96,8 @@ Congressional Trades - NVDA
 Showing 6 trades
 ```
 
+> **Note:** The STOCK Act requires Congress members to disclose trades within 45 days, but amounts are reported in ranges ($1K–$15K, $15K–$50K, etc.) — not exact figures. This is how the law works, not a data limitation.
+
 ### Michael Burry's current positions
 
 ```
@@ -118,6 +120,8 @@ Total Positions: 8
 │ 8 │ BRUKER CORP               │ 116794207 │    48,334 │  $13,137,181 │
 └───┴───────────────────────────┴───────────┴───────────┴──────────────┘
 ```
+
+> **Note:** 13F filings are required quarterly with a 45-day lag by SEC law — this is the most current data legally available anywhere. No tool has more up-to-date hedge fund disclosures.
 
 ## CLI Commands
 
