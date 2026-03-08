@@ -119,21 +119,26 @@ Use autopilot-cli as an MCP server for Claude Desktop or other AI agents.
 
 ### Configuration
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+First install the package:
+
+```bash
+pip install -e /path/to/autopilot-cli
+playwright install chromium
+```
+
+Then add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "autopilot": {
-      "command": "python3",
-      "args": ["-m", "autopilot_cli.mcp_server"],
-      "env": {
-        "PYTHONPATH": "/path/to/autopilot-cli"
-      }
+      "command": "autopilot-mcp"
     }
   }
 }
 ```
+
+> **Tip:** Find the installed path of `autopilot-mcp` by running `which autopilot-mcp` after installation.
 
 ### Available MCP Tools
 
