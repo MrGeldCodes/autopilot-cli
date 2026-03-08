@@ -2,11 +2,18 @@
 
 import re
 import time
+import asyncio
 from datetime import datetime, date
 from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 from autopilot_cli.models import CongressionalTrade, Politician
+
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
 
 
 def _get_with_retry(url: str, headers: dict, retries: int = 3, timeout: float = 30.0):
@@ -24,6 +31,99 @@ def _get_with_retry(url: str, headers: dict, retries: int = 3, timeout: float = 
     raise last_err
 
 
+async def _fetch_politician_trades_playwright(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
+    """
+    Fetch trades using Playwright for client-side rendering.
+    
+    Args:
+        politician_slug: URL-friendly name
+        page_size: Number of trades to fetch
+        
+    Returns:
+        List of CongressionalTrade objects
+    """
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        
+        url = f"https://www.capitoltrades.com/trades?politician={politician_slug}&pageSize={page_size}"
+        
+        try:
+            await page.goto(url, wait_until="load", timeout=30000)
+            await asyncio.sleep(2)  # Wait for data to load
+            
+            # Extract table data from page
+            rows_data = await page.evaluate('''() => {
+                const rows = document.querySelectorAll('tbody tr');
+                return Array.from(rows).map(tr => ({
+                    cells: Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+                }));
+            }''')
+            
+            trades = []
+            
+            for row_data in rows_data:
+                cells = row_data['cells']
+                
+                # Skip if "No results" or insufficient cells
+                if len(cells) < 7 or "No results" in cells[0]:
+                    continue
+                
+                # Parse cell contents (same structure as HTML version)
+                politician_text = cells[0]
+                politician_name = politician_text.split('\n')[0].strip()
+                
+                party = None
+                chamber = None
+                if "Republican" in politician_text:
+                    party = "Republican"
+                elif "Democrat" in politician_text:
+                    party = "Democrat"
+                if "Senate" in politician_text:
+                    chamber = "Senate"
+                elif "House" in politician_text:
+                    chamber = "House"
+                
+                # Asset and ticker
+                asset_text = cells[1]
+                asset_description = asset_text.split('\n')[0].strip()
+                
+                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
+                ticker = ticker_match.group(1) if ticker_match else None
+                
+                # Dates - handle multi-line format
+                disc_date_str = cells[2].replace('\n', ' ').strip()
+                disclosure_date = parse_date(disc_date_str)
+                
+                trans_date_str = cells[3].replace('\n', ' ').strip()
+                transaction_date = parse_date(trans_date_str)
+                
+                # Trade type (column 6)
+                trade_type_text = cells[6].lower().strip()
+                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
+                
+                # Amount (column 7)
+                amount = cells[7] if len(cells) > 7 else ""
+                
+                trade = CongressionalTrade(
+                    politician=politician_name or politician_slug.replace("-", " ").title(),
+                    transaction_date=transaction_date,
+                    disclosure_date=disclosure_date,
+                    ticker=ticker,
+                    asset_description=asset_description,
+                    trade_type=trade_type,
+                    amount=amount,
+                    party=party,
+                    chamber=chamber,
+                )
+                
+                trades.append(trade)
+            
+            return trades
+        finally:
+            await browser.close()
+
+
 def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
     """
     Fetch recent trades for a specific politician from Capitol Trades.
@@ -35,6 +135,14 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
     Returns:
         List of CongressionalTrade objects
     """
+    # Try Playwright first (handles client-side rendering)
+    if PLAYWRIGHT_AVAILABLE:
+        try:
+            return asyncio.run(_fetch_politician_trades_playwright(politician_slug, page_size))
+        except Exception as e:
+            print(f"Warning: Playwright fetch failed, falling back to HTTP: {e}")
+    
+    # Fallback to HTTP-based approach
     url = f"https://www.capitoltrades.com/trades?politician={politician_slug}&pageSize={page_size}"
 
     headers = {
@@ -131,6 +239,98 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
         raise Exception(f"Failed to fetch trades for {politician_slug}: {str(e)}")
 
 
+async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -> list[CongressionalTrade]:
+    """
+    Fetch trades by ticker using Playwright for client-side rendering.
+    
+    Args:
+        ticker: Stock ticker symbol
+        page_size: Number of trades to fetch
+        
+    Returns:
+        List of CongressionalTrade objects
+    """
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        
+        url = f"https://www.capitoltrades.com/trades?ticker={ticker.upper()}&pageSize={page_size}"
+        
+        try:
+            await page.goto(url, wait_until="load", timeout=30000)
+            await asyncio.sleep(2)  # Wait for data to load
+            
+            # Extract table data from page
+            rows_data = await page.evaluate('''() => {
+                const rows = document.querySelectorAll('tbody tr');
+                return Array.from(rows).map(tr => ({
+                    cells: Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+                }));
+            }''')
+            
+            trades = []
+            
+            for row_data in rows_data:
+                cells = row_data['cells']
+                
+                # Skip if "No results" or insufficient cells
+                if len(cells) < 7 or "No results" in cells[0]:
+                    continue
+                
+                # Parse cell contents
+                politician_text = cells[0]
+                politician_name = politician_text.split('\n')[0].strip()
+                
+                party = None
+                chamber = None
+                if "Republican" in politician_text:
+                    party = "Republican"
+                elif "Democrat" in politician_text:
+                    party = "Democrat"
+                if "Senate" in politician_text:
+                    chamber = "Senate"
+                elif "House" in politician_text:
+                    chamber = "House"
+                
+                # Asset
+                asset_text = cells[1]
+                asset_description = asset_text.split('\n')[0].strip()
+                
+                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
+                extracted_ticker = ticker_match.group(1) if ticker_match else ticker.upper()
+                
+                # Dates
+                disc_date_str = cells[2].replace('\n', ' ').strip()
+                disclosure_date = parse_date(disc_date_str)
+                
+                trans_date_str = cells[3].replace('\n', ' ').strip()
+                transaction_date = parse_date(trans_date_str)
+                
+                # Type and amount
+                trade_type_text = cells[6].lower().strip()
+                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
+                
+                amount = cells[7] if len(cells) > 7 else ""
+                
+                trade = CongressionalTrade(
+                    politician=politician_name,
+                    transaction_date=transaction_date,
+                    disclosure_date=disclosure_date,
+                    ticker=extracted_ticker,
+                    asset_description=asset_description,
+                    trade_type=trade_type,
+                    amount=amount,
+                    party=party,
+                    chamber=chamber,
+                )
+                
+                trades.append(trade)
+            
+            return trades
+        finally:
+            await browser.close()
+
+
 def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[CongressionalTrade]:
     """
     Fetch recent Congressional trades for a specific ticker.
@@ -142,6 +342,14 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
     Returns:
         List of CongressionalTrade objects
     """
+    # Try Playwright first (handles client-side rendering)
+    if PLAYWRIGHT_AVAILABLE:
+        try:
+            return asyncio.run(_fetch_trades_by_ticker_playwright(ticker, page_size))
+        except Exception as e:
+            print(f"Warning: Playwright fetch failed, falling back to HTTP: {e}")
+    
+    # Fallback to HTTP-based approach
     url = f"https://www.capitoltrades.com/trades?ticker={ticker.upper()}&pageSize={page_size}"
 
     headers = {
