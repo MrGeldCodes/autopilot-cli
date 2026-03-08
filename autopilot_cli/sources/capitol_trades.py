@@ -1,0 +1,281 @@
+"""Capitol Trades data fetcher."""
+
+import re
+from datetime import datetime
+from typing import Optional
+import httpx
+from bs4 import BeautifulSoup
+from autopilot_cli.models import CongressionalTrade, Politician
+
+
+def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
+    """
+    Fetch recent trades for a specific politician from Capitol Trades.
+
+    Args:
+        politician_slug: URL-friendly name (e.g., 'nancy-pelosi', 'tommy-tuberville')
+        page_size: Number of trades to fetch
+
+    Returns:
+        List of CongressionalTrade objects
+    """
+    url = f"https://www.capitoltrades.com/trades?politician={politician_slug}&pageSize={page_size}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    try:
+        response = httpx.get(url, headers=headers, follow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+
+        # Parse HTML with BeautifulSoup
+        soup = BeautifulSoup(response.text, "lxml")
+
+        trades = []
+
+        # Find the trades table - Capitol Trades uses a table with class 'q-table'
+        table = soup.find("table", class_="q-table")
+
+        if not table:
+            # Try alternative table selectors
+            table = soup.find("table")
+
+        if table:
+            rows = table.find("tbody").find_all("tr") if table.find("tbody") else []
+
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) < 7:
+                    continue
+
+                # Column structure from Capitol Trades:
+                # 0: Politician, 1: Asset/Ticker, 2: Disclosure Date, 3: Transaction Date,
+                # 4: Days, 5: Owner, 6: Type, 7: Amount, 8: Price
+
+                # Politician
+                politician_name = cells[0].get_text(strip=True)
+
+                # Extract party and chamber from politician cell
+                politician_text = cells[0].get_text()
+                party = None
+                chamber = None
+                if "Republican" in politician_text:
+                    party = "Republican"
+                elif "Democrat" in politician_text:
+                    party = "Democrat"
+                if "Senate" in politician_text:
+                    chamber = "Senate"
+                elif "House" in politician_text:
+                    chamber = "House"
+
+                # Clean politician name (remove party/chamber info)
+                politician_name = re.split(r'(Republican|Democrat|Senate|House)', politician_name)[0].strip()
+
+                # Asset and ticker
+                asset_text = cells[1].get_text(strip=True)
+                asset_description = asset_text
+
+                # Extract ticker (format is usually "Company NameTICKER:US")
+                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
+                ticker = ticker_match.group(1) if ticker_match else None
+
+                # Disclosure date (column 2)
+                disc_date_str = cells[2].get_text(strip=True)
+                disclosure_date = parse_date(disc_date_str)
+
+                # Transaction date (column 3)
+                trans_date_str = cells[3].get_text(strip=True)
+                transaction_date = parse_date(trans_date_str)
+
+                # Trade type (column 6 - "buy" or "sell")
+                trade_type_text = cells[6].get_text(strip=True).lower()
+                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
+
+                # Amount (column 7)
+                amount = cells[7].get_text(strip=True) if len(cells) > 7 else ""
+
+                trade = CongressionalTrade(
+                    politician=politician_name or politician_slug.replace("-", " ").title(),
+                    transaction_date=transaction_date,
+                    disclosure_date=disclosure_date,
+                    ticker=ticker,
+                    asset_description=asset_description,
+                    trade_type=trade_type,
+                    amount=amount,
+                    party=party,
+                    chamber=chamber,
+                )
+
+                trades.append(trade)
+
+        return trades
+
+    except Exception as e:
+        raise Exception(f"Failed to fetch trades for {politician_slug}: {str(e)}")
+
+
+def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[CongressionalTrade]:
+    """
+    Fetch recent Congressional trades for a specific ticker.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., 'NVDA', 'AAPL')
+        page_size: Number of trades to fetch
+
+    Returns:
+        List of CongressionalTrade objects
+    """
+    url = f"https://www.capitoltrades.com/trades?ticker={ticker.upper()}&pageSize={page_size}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    try:
+        response = httpx.get(url, headers=headers, follow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "lxml")
+
+        trades = []
+
+        table = soup.find("table", class_="q-table")
+        if not table:
+            table = soup.find("table")
+
+        if table:
+            rows = table.find("tbody").find_all("tr") if table.find("tbody") else []
+
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) < 7:
+                    continue
+
+                # Same column structure as fetch_politician_trades
+                politician_text = cells[0].get_text()
+                politician_name = cells[0].get_text(strip=True)
+
+                # Extract party and chamber
+                party = None
+                chamber = None
+                if "Republican" in politician_text:
+                    party = "Republican"
+                elif "Democrat" in politician_text:
+                    party = "Democrat"
+                if "Senate" in politician_text:
+                    chamber = "Senate"
+                elif "House" in politician_text:
+                    chamber = "House"
+
+                politician_name = re.split(r'(Republican|Democrat|Senate|House)', politician_name)[0].strip()
+
+                # Asset
+                asset_text = cells[1].get_text(strip=True)
+                asset_description = asset_text
+
+                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
+                extracted_ticker = ticker_match.group(1) if ticker_match else ticker.upper()
+
+                # Dates
+                disc_date_str = cells[2].get_text(strip=True)
+                disclosure_date = parse_date(disc_date_str)
+
+                trans_date_str = cells[3].get_text(strip=True)
+                transaction_date = parse_date(trans_date_str)
+
+                # Type and amount
+                trade_type_text = cells[6].get_text(strip=True).lower()
+                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
+
+                amount = cells[7].get_text(strip=True) if len(cells) > 7 else ""
+
+                trade = CongressionalTrade(
+                    politician=politician_name,
+                    transaction_date=transaction_date,
+                    disclosure_date=disclosure_date,
+                    ticker=extracted_ticker,
+                    asset_description=asset_description,
+                    trade_type=trade_type,
+                    amount=amount,
+                    party=party,
+                    chamber=chamber,
+                )
+
+                trades.append(trade)
+
+        return trades
+
+    except Exception as e:
+        raise Exception(f"Failed to fetch trades for ticker {ticker}: {str(e)}")
+
+
+def list_politicians() -> list[Politician]:
+    """
+    Fetch list of politicians with trade tracking.
+
+    Returns:
+        List of Politician objects
+    """
+    # Return a curated list of high-profile politicians known to be tracked
+    # This is more reliable than scraping the dynamic politician list page
+    known_politicians = [
+        Politician(name="Nancy Pelosi", slug="nancy-pelosi", party="Democrat", chamber="House"),
+        Politician(name="Tommy Tuberville", slug="tommy-tuberville", party="Republican", chamber="Senate"),
+        Politician(name="Dan Crenshaw", slug="dan-crenshaw", party="Republican", chamber="House"),
+        Politician(name="Austin Scott", slug="austin-scott", party="Republican", chamber="House"),
+        Politician(name="Josh Gottheimer", slug="josh-gottheimer", party="Democrat", chamber="House"),
+        Politician(name="Marjorie Taylor Greene", slug="marjorie-taylor-greene", party="Republican", chamber="House"),
+        Politician(name="Mark Green", slug="mark-green", party="Republican", chamber="House"),
+        Politician(name="Brian Higgins", slug="brian-higgins", party="Democrat", chamber="House"),
+        Politician(name="Garret Graves", slug="garret-graves", party="Republican", chamber="House"),
+        Politician(name="John Boozman", slug="john-boozman", party="Republican", chamber="Senate"),
+        Politician(name="Ro Khanna", slug="ro-khanna", party="Democrat", chamber="House"),
+        Politician(name="Michael McCaul", slug="michael-mccaul", party="Republican", chamber="House"),
+        Politician(name="Kevin Hern", slug="kevin-hern", party="Republican", chamber="House"),
+        Politician(name="Debbie Wasserman Schultz", slug="debbie-wasserman-schultz", party="Democrat", chamber="House"),
+        Politician(name="Pat Fallon", slug="pat-fallon", party="Republican", chamber="House"),
+    ]
+
+    return known_politicians
+
+
+def parse_date(date_str: str) -> Optional[datetime]:
+    """Parse date string to datetime object."""
+    if not date_str:
+        return None
+
+    # Capitol Trades format: "6 Mar2026" or "27 Feb2026"
+    # Extract using regex
+    match = re.match(r'(\d+)\s*([A-Za-z]+)(\d{4})', date_str)
+    if match:
+        day = match.group(1)
+        month = match.group(2)
+        year = match.group(3)
+        # Reconstruct as "6 Mar 2026"
+        reformatted = f"{day} {month} {year}"
+
+        try:
+            return datetime.strptime(reformatted, "%d %b %Y").date()
+        except ValueError:
+            pass
+
+    # Try common date formats
+    formats = [
+        "%m/%d/%Y",
+        "%Y-%m-%d",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%d %b %Y",
+        "%d %B %Y",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+
+    return None
