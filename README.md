@@ -100,6 +100,23 @@ Showing 6 trades
 
 > **Note:** The STOCK Act requires Congress members to disclose trades within 45 days, but amounts are reported in ranges ($1K–$15K, $15K–$50K, etc.) — not exact figures. This is how the law works, not a data limitation.
 
+### Politician list (with chamber)
+
+```
+                             Trackable Politicians                              
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Name                      ┃ Slug                      ┃ Party      ┃ Chamber ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━┩
+│ John Boozman              │ john-boozman              │ Republican │ Senate  │
+│ Shelley Moore Capito      │ shelley-moore-capito      │ Republican │ Senate  │
+│ Sheldon Whitehouse        │ sheldon-whitehouse        │ Democrat   │ Senate  │
+│ ...                       │                           │            │         │
+│ Nancy Pelosi              │ nancy-pelosi              │ Democrat   │ House   │
+│ Marjorie Taylor Greene    │ marjorie-taylor-greene    │ Republican │ House   │
+│ Dan Crenshaw              │ dan-crenshaw              │ Republican │ House   │
+└───────────────────────────┴───────────────────────────┴────────────┴─────────┘
+```
+
 ### Michael Burry's current positions
 
 ```
