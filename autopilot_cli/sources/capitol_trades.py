@@ -434,34 +434,118 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
         raise Exception(f"Failed to fetch trades for ticker {ticker}: {str(e)}")
 
 
+def _name_to_slug(name: str) -> str:
+    """Convert a politician name to a URL-friendly slug."""
+    slug = name.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"\s+", "-", slug)
+    return slug
+
+
+def _fetch_politicians_dynamic() -> list[Politician]:
+    """Fetch the full politician list from Capitol Trades (paginated)."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    politicians: list[Politician] = []
+    seen_ids: set[str] = set()
+
+    for page in range(1, 20):  # safety cap
+        try:
+            response = _get_with_retry(
+                f"https://www.capitoltrades.com/politicians?page={page}&pageSize=100",
+                headers,
+            )
+        except Exception:
+            break
+
+        soup = BeautifulSoup(response.text, "lxml")
+        links = soup.find_all("a", href=re.compile(r"/politicians/[A-Z]"))
+
+        if not links:
+            break
+
+        for link in links:
+            href = link.get("href", "")
+            bioguide = href.split("/")[-1]
+            if bioguide in seen_ids:
+                continue
+            seen_ids.add(bioguide)
+
+            text = link.get_text(strip=True)
+            # Pattern: NamePartyState...
+            m = re.match(
+                r"^(.+?)(Democrat|Republican|Independent)(.+?)(?:Trades?\d|$)", text
+            )
+            if m:
+                name = m.group(1).strip()
+                party = m.group(2).strip()
+            else:
+                name = text[:60].strip()
+                party = None
+
+            # Extract trade count if present
+            tc = re.search(r"Trades?(\d+)", text)
+            trade_count = int(tc.group(1)) if tc else 0
+
+            slug = _name_to_slug(name)
+
+            politicians.append(
+                Politician(
+                    name=name,
+                    slug=slug,
+                    party=party,
+                    chamber=None,
+                    trade_count=trade_count,
+                )
+            )
+
+        if len(links) < 100:
+            break
+
+    return politicians
+
+
+# Hardcoded fallback list (kept for resilience)
+_FALLBACK_POLITICIANS = [
+    Politician(name="Nancy Pelosi", slug="nancy-pelosi", party="Democrat", chamber="House"),
+    Politician(name="Tommy Tuberville", slug="tommy-tuberville", party="Republican", chamber="Senate"),
+    Politician(name="Dan Crenshaw", slug="dan-crenshaw", party="Republican", chamber="House"),
+    Politician(name="Austin Scott", slug="austin-scott", party="Republican", chamber="House"),
+    Politician(name="Josh Gottheimer", slug="josh-gottheimer", party="Democrat", chamber="House"),
+    Politician(name="Marjorie Taylor Greene", slug="marjorie-taylor-greene", party="Republican", chamber="House"),
+    Politician(name="Mark Green", slug="mark-green", party="Republican", chamber="House"),
+    Politician(name="Brian Higgins", slug="brian-higgins", party="Democrat", chamber="House"),
+    Politician(name="Garret Graves", slug="garret-graves", party="Republican", chamber="House"),
+    Politician(name="John Boozman", slug="john-boozman", party="Republican", chamber="Senate"),
+    Politician(name="Ro Khanna", slug="ro-khanna", party="Democrat", chamber="House"),
+    Politician(name="Michael McCaul", slug="michael-mccaul", party="Republican", chamber="House"),
+    Politician(name="Kevin Hern", slug="kevin-hern", party="Republican", chamber="House"),
+    Politician(name="Debbie Wasserman Schultz", slug="debbie-wasserman-schultz", party="Democrat", chamber="House"),
+    Politician(name="Pat Fallon", slug="pat-fallon", party="Republican", chamber="House"),
+]
+
+
 def list_politicians() -> list[Politician]:
     """
-    Fetch list of politicians with trade tracking.
+    Fetch list of politicians with trade tracking from Capitol Trades.
+
+    Dynamically scrapes all politicians (~200+) from the Capitol Trades
+    website. Falls back to a hardcoded list of 15 if the fetch fails.
 
     Returns:
         List of Politician objects
     """
-    # Return a curated list of high-profile politicians known to be tracked
-    # This is more reliable than scraping the dynamic politician list page
-    known_politicians = [
-        Politician(name="Nancy Pelosi", slug="nancy-pelosi", party="Democrat", chamber="House"),
-        Politician(name="Tommy Tuberville", slug="tommy-tuberville", party="Republican", chamber="Senate"),
-        Politician(name="Dan Crenshaw", slug="dan-crenshaw", party="Republican", chamber="House"),
-        Politician(name="Austin Scott", slug="austin-scott", party="Republican", chamber="House"),
-        Politician(name="Josh Gottheimer", slug="josh-gottheimer", party="Democrat", chamber="House"),
-        Politician(name="Marjorie Taylor Greene", slug="marjorie-taylor-greene", party="Republican", chamber="House"),
-        Politician(name="Mark Green", slug="mark-green", party="Republican", chamber="House"),
-        Politician(name="Brian Higgins", slug="brian-higgins", party="Democrat", chamber="House"),
-        Politician(name="Garret Graves", slug="garret-graves", party="Republican", chamber="House"),
-        Politician(name="John Boozman", slug="john-boozman", party="Republican", chamber="Senate"),
-        Politician(name="Ro Khanna", slug="ro-khanna", party="Democrat", chamber="House"),
-        Politician(name="Michael McCaul", slug="michael-mccaul", party="Republican", chamber="House"),
-        Politician(name="Kevin Hern", slug="kevin-hern", party="Republican", chamber="House"),
-        Politician(name="Debbie Wasserman Schultz", slug="debbie-wasserman-schultz", party="Democrat", chamber="House"),
-        Politician(name="Pat Fallon", slug="pat-fallon", party="Republican", chamber="House"),
-    ]
+    try:
+        politicians = _fetch_politicians_dynamic()
+        if politicians:
+            return politicians
+    except Exception:
+        pass
 
-    return known_politicians
+    return list(_FALLBACK_POLITICIANS)
 
 
 def parse_date(date_str: str) -> Optional[date]:

@@ -1,8 +1,19 @@
 # autopilot-cli
 
-Ask Claude: "Which congressman bought NVDA this week?"
+**Congress trades stocks. You should know about it.**
 
-A Python CLI + MCP server that lets AI agents query Congressional trading disclosures and hedge fund 13F filings. No API keys required.
+The STOCK Act requires every member of Congress to disclose stock trades within 45 days. `autopilot-cli` surfaces those disclosures instantly — query by politician or ticker, pull hedge fund 13F filings, and pipe it all to AI agents via MCP. No API keys. No paywalls.
+
+```bash
+# Who in Congress bought NVDA recently?
+autopilot trades --ticker NVDA
+
+# What's Burry actually holding right now?
+autopilot pilot burry
+
+# Ask Claude directly (via MCP):
+# "Which senators bought defense stocks before the Ukraine vote?"
+```
 
 ## Features
 
@@ -62,6 +73,50 @@ autopilot pilot druckenmiller
 # Get JSON output for programmatic consumption
 autopilot trades --ticker NVDA --json
 autopilot pilot burry --json
+```
+
+## Sample Output
+
+> Live data — results vary by trading activity.
+
+### Congressional trades for NVDA
+
+```
+Congressional Trades - NVDA                          
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Politician         ┃ Date       ┃ Type     ┃ Amount  ┃ Party      ┃ Chamber ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━┩
+│ John Boozman       │ 2026-02-05 │ Purchase │ 1K–15K  │ Republican │ Senate  │
+│ John Boozman       │ 2026-02-26 │ Purchase │ 1K–15K  │ Republican │ Senate  │
+│ John Boozman       │ 2026-02-12 │ Purchase │ 1K–15K  │ Republican │ Senate  │
+│ John Boozman       │ 2026-02-25 │ Purchase │ 1K–15K  │ Republican │ Senate  │
+│ John Boozman       │ 2026-02-05 │ Purchase │ 1K–15K  │ Republican │ Senate  │
+│ Sheldon Whitehouse │ 2026-02-22 │ Sale     │ 1K–15K  │ Democrat   │ Senate  │
+└────────────────────┴────────────┴──────────┴─────────┴────────────┴─────────┘
+Showing 20 trades
+```
+
+### Michael Burry's current positions
+
+```
+Scion Asset Management, LLC
+Filing Date: 2025-11-03
+Period: 2025-09-30
+Total Positions: 8
+
+                          Top 8 Positions by Value                          
+┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ # ┃ Company                   ┃ CUSIP     ┃    Shares ┃            Value ┃
+┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ 1 │ PALANTIR TECHNOLOGIES INC │ 69608A108 │ 5,000,000 │ $912,100,000,000 │
+│ 2 │ NVIDIA CORPORATION        │ 67066G104 │ 1,000,000 │ $186,580,000,000 │
+│ 3 │ PFIZER INC                │ 717081103 │ 6,000,000 │ $152,880,000,000 │
+│ 4 │ HALLIBURTON CO            │ 406216101 │ 2,500,000 │  $61,500,000,000 │
+│ 5 │ MOLINA HEALTHCARE INC     │ 60855R100 │   125,000 │  $23,920,000,000 │
+│ 6 │ LULULEMON ATHLETICA INC   │ 550021109 │   100,000 │  $17,793,000,000 │
+│ 7 │ SLM CORP                  │ 78442P106 │   480,054 │  $13,287,895,000 │
+│ 8 │ BRUKER CORP               │ 116794207 │    48,334 │  $13,137,181,000 │
+└───┴───────────────────────────┴───────────┴───────────┴──────────────────┘
 ```
 
 ## CLI Commands
