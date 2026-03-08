@@ -37,7 +37,7 @@ def _resolve_bioguide_id(slug: str) -> Optional[str]:
     Scrapes the Capitol Trades politicians listing and matches by slug.
     """
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
     slug_lower = slug.lower().strip()
@@ -225,7 +225,7 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
     url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
@@ -432,7 +432,7 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
     url = f"https://www.capitoltrades.com/trades?issueTicker={ticker.upper()}&pageSize={page_size}"
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
@@ -524,7 +524,7 @@ def _name_to_slug(name: str) -> str:
 def _fetch_politicians_dynamic() -> list[Politician]:
     """Fetch the full politician list from Capitol Trades (paginated)."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 

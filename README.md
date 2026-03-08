@@ -34,6 +34,8 @@ playwright install chromium
 
 > **Note:** The `playwright install chromium` step downloads the browser used to fetch live Congressional trade data from Capitol Trades.
 
+> **Windows users:** Run commands in PowerShell or Command Prompt. If `autopilot` is not found after install, try `python -m autopilot_cli` or restart your terminal to refresh PATH.
+
 ## Quick Start
 
 ### Query Congressional Trades
@@ -185,7 +187,11 @@ pip install -e .
 playwright install chromium
 ```
 
-Then add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add to your Claude Desktop config file:
+
+**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+**Linux:** `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -197,7 +203,7 @@ Then add to your Claude Desktop config (`~/Library/Application Support/Claude/cl
 }
 ```
 
-> **Tip:** Find the installed path of `autopilot-mcp` by running `which autopilot-mcp` after installation.
+> **Tip:** Find the installed path of `autopilot-mcp` by running `which autopilot-mcp` (macOS/Linux) or `where autopilot-mcp` (Windows) after installation.
 
 ### Available MCP Tools
 
