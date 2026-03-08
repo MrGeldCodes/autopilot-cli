@@ -97,7 +97,7 @@ class MCPServer:
                 "jsonrpc": "2.0",
                 "id": request.get("id"),
                 "result": {
-                    "protocolVersion": "0.1.0",
+                    "protocolVersion": "2024-11-05",
                     "serverInfo": {
                         "name": "autopilot-cli-mcp",
                         "version": "0.1.0",
@@ -147,6 +147,9 @@ class MCPServer:
                     },
                 }
 
+        elif method == "notifications/initialized":
+            return None  # Notifications don't require a response
+
         else:
             return {
                 "jsonrpc": "2.0",
@@ -195,7 +198,8 @@ class MCPServer:
             try:
                 request = json.loads(line)
                 response = self.handle_request(request)
-                print(json.dumps(response), flush=True)
+                if response is not None:
+                    print(json.dumps(response), flush=True)
             except Exception as e:
                 error_response = {
                     "jsonrpc": "2.0",

@@ -242,7 +242,7 @@ def list_politicians() -> list[Politician]:
     return known_politicians
 
 
-def parse_date(date_str: str) -> Optional[datetime]:
+def parse_date(date_str: str) -> Optional[date]:
     """Parse date string to datetime object."""
     if not date_str:
         return None
