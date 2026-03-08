@@ -215,13 +215,9 @@ Once configured, ask Claude:
 ## Data Sources
 
 ### Capitol Trades
-Fetches data by scraping https://www.capitoltrades.com. No API key required.
+Fetches data from https://www.capitoltrades.com. No API key required. 200+ politicians tracked.
 
-**Available Politicians:**
-- Nancy Pelosi, Tommy Tuberville, Dan Crenshaw, Austin Scott
-- Josh Gottheimer, Marjorie Taylor Greene, Mark Green, Brian Higgins
-- Garret Graves, John Boozman, Ro Khanna, Michael McCaul
-- Kevin Hern, Debbie Wasserman Schultz, Pat Fallon
+Run `autopilot politician --list` to see all available politicians.
 
 ### SEC EDGAR
 Fetches 13F filings via the SEC EDGAR data API. No API key required.
