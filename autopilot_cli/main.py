@@ -75,7 +75,8 @@ def politician_command(
             typer.echo(json.dumps(data, indent=2, default=str))
             return
 
-        table = Table(title=f"Recent Trades - {name.title()}")
+        display_name = " ".join(word.capitalize() for word in name.replace("-", " ").split())
+        table = Table(title=f"Recent Trades - {display_name}")
         table.add_column("Date", style="cyan")
         table.add_column("Ticker", style="yellow")
         table.add_column("Asset", style="white")
@@ -124,7 +125,7 @@ def trades_command(
             return
 
         table = Table(title=f"Congressional Trades - {ticker.upper()}")
-        table.add_column("Politician", style="cyan")
+        table.add_column("Politician", style="cyan", no_wrap=True, min_width=20)
         table.add_column("Date", style="yellow")
         table.add_column("Type", style="magenta")
         table.add_column("Amount", style="green")

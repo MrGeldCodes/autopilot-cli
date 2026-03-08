@@ -88,6 +88,17 @@ _BIOGUIDE_CACHE: dict[str, str] = {
     "pat-fallon": "F000246",
     "kevin-hern": "H001082",
     "john-boozman": "B001236",
+    # Short name aliases for better UX
+    "pelosi": "P000197",
+    "tuberville": "T000278",
+    "crenshaw": "C001120",
+    "greene": "G000596",
+    "khanna": "K000389",
+    "mccaul": "M001157",
+    "gottheimer": "G000583",
+    "boozman": "B001236",
+    "fallon": "F000246",
+    "hern": "H001082",
 }
 
 

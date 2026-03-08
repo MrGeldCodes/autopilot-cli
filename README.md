@@ -45,7 +45,7 @@ playwright install chromium
 autopilot politician --list
 
 # Get recent trades for a specific politician
-autopilot politician pelosi
+autopilot politician nancy-pelosi
 autopilot politician tommy-tuberville
 
 # Find who in Congress traded a specific stock
@@ -156,7 +156,7 @@ Query Congressional trades for a specific politician.
 **Examples:**
 ```bash
 autopilot politician nancy-pelosi
-autopilot politician tuberville --limit 10
+autopilot politician tommy-tuberville --limit 10
 autopilot politician --list
 ```
 
