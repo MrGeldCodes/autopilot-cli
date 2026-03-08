@@ -18,7 +18,10 @@ A Python CLI + MCP server that lets AI agents query Congressional trading disclo
 git clone https://github.com/MrGeldCodes/autopilot-cli.git
 cd autopilot-cli
 pip install -e .
+playwright install chromium
 ```
+
+> **Note:** The `playwright install chromium` step downloads the browser used to fetch live Congressional trade data from Capitol Trades.
 
 ## Quick Start
 
