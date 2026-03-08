@@ -93,7 +93,7 @@ Congressional Trades - NVDA
 │ John Boozman       │ 2026-02-05 │ Purchase │ 1K–15K  │ Republican │ Senate  │
 │ Sheldon Whitehouse │ 2026-02-22 │ Sale     │ 1K–15K  │ Democrat   │ Senate  │
 └────────────────────┴────────────┴──────────┴─────────┴────────────┴─────────┘
-Showing 20 trades
+Showing 6 trades
 ```
 
 ### Michael Burry's current positions
@@ -177,7 +177,7 @@ Use autopilot-cli as an MCP server for Claude Desktop or other AI agents.
 First install the package:
 
 ```bash
-pip install -e /path/to/autopilot-cli
+pip install -e .
 playwright install chromium
 ```
 
@@ -228,6 +228,16 @@ Fetches 13F filings via the SEC EDGAR data API. No API key required.
 - Bill Ackman (Pershing Square Capital Management)
 - Ray Dalio (Bridgewater Associates)
 - Stanley Druckenmiller (Duquesne Family Office)
+- David Tepper (Appaloosa Management)
+- Steven Cohen (Point72 Asset Management)
+- David Einhorn (Greenlight Capital)
+- George Soros (Soros Fund Management)
+- Carl Icahn (Icahn Capital Management)
+- Ken Griffin (Citadel Advisors)
+- Chase Coleman (Tiger Global Management)
+- Dan Loeb (Third Point LLC)
+
+Run `autopilot pilot --list` to see all available managers.
 
 ## Project Structure
 
@@ -254,6 +264,7 @@ autopilot-cli/
 - pydantic
 - beautifulsoup4
 - lxml
+- playwright
 
 ## License
 
