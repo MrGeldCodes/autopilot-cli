@@ -7,7 +7,7 @@ name = "autopilot-cli"
 version = "0.1.0"
 description = "AI agent-powered CLI for Congressional trades and hedge fund 13F filings"
 license = {text = "MIT"}
-authors = [{name = "Steven Maik"}]
+authors = [{name = "MrGeld"}]
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
