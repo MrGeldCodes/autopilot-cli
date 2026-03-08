@@ -1,11 +1,27 @@
 """Capitol Trades data fetcher."""
 
 import re
-from datetime import datetime
+import time
+from datetime import datetime, date
 from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 from autopilot_cli.models import CongressionalTrade, Politician
+
+
+def _get_with_retry(url: str, headers: dict, retries: int = 3, timeout: float = 30.0):
+    """HTTP GET with basic retry on transient errors."""
+    last_err = None
+    for attempt in range(retries):
+        try:
+            response = httpx.get(url, headers=headers, follow_redirects=True, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+            last_err = e
+            if attempt < retries - 1:
+                time.sleep(1.5 ** attempt)
+    raise last_err
 
 
 def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
@@ -27,8 +43,7 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
     }
 
     try:
-        response = httpx.get(url, headers=headers, follow_redirects=True, timeout=30.0)
-        response.raise_for_status()
+        response = _get_with_retry(url, headers)
 
         # Parse HTML with BeautifulSoup
         soup = BeautifulSoup(response.text, "lxml")
@@ -135,8 +150,7 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
     }
 
     try:
-        response = httpx.get(url, headers=headers, follow_redirects=True, timeout=30.0)
-        response.raise_for_status()
+        response = _get_with_retry(url, headers)
 
         soup = BeautifulSoup(response.text, "lxml")
 

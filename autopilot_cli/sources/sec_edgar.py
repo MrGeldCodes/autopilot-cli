@@ -1,11 +1,27 @@
 """SEC EDGAR 13F filings fetcher."""
 
 import re
+import time
 from datetime import datetime
 from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 from autopilot_cli.models import Filing13F, Position13F, HedgeFundManager
+
+
+def _get_with_retry(url: str, headers: dict, retries: int = 3, timeout: float = 30.0):
+    """HTTP GET with basic retry on transient errors."""
+    last_err = None
+    for attempt in range(retries):
+        try:
+            response = httpx.get(url, headers=headers, follow_redirects=True, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.NetworkError) as e:
+            last_err = e
+            if attempt < retries - 1:
+                time.sleep(1.5 ** attempt)
+    raise last_err
 
 
 # Known hedge fund managers for quick access
@@ -48,8 +64,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
         # Use the SEC EDGAR data API to search for submissions
         submissions_url = f"https://data.sec.gov/submissions/CIK{manager.cik}.json"
 
-        response = httpx.get(submissions_url, headers=headers, timeout=30.0)
-        response.raise_for_status()
+        response = _get_with_retry(submissions_url, headers)
 
         data = response.json()
 
@@ -100,11 +115,9 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
         for filename in xml_filenames:
             try:
                 info_table_url = f"{base_url}/{filename}"
-                xml_response = httpx.get(info_table_url, headers=headers, timeout=30.0)
-
-                if xml_response.status_code == 200:
-                    xml_content = xml_response.text
-                    break
+                xml_response = _get_with_retry(info_table_url, headers)
+                xml_content = xml_response.text
+                break
             except:
                 continue
 
@@ -118,7 +131,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
             }
 
             try:
-                index_response = httpx.get(filing_index_url, headers=headers_html, timeout=30.0)
+                index_response = _get_with_retry(filing_index_url, headers_html)
                 index_soup = BeautifulSoup(index_response.text, "lxml")
 
                 # Find XML file link
@@ -131,7 +144,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
                         else:
                             info_table_url = f"{base_url}/{href}"
 
-                        xml_response = httpx.get(info_table_url, headers=headers, timeout=30.0)
+                        xml_response = _get_with_retry(info_table_url, headers)
                         xml_content = xml_response.text
                         break
             except:

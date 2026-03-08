@@ -15,7 +15,7 @@ A Python CLI + MCP server that lets AI agents query Congressional trading disclo
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/autopilot-cli.git
+git clone https://github.com/MrGeldCodes/autopilot-cli.git
 cd autopilot-cli
 pip install -e .
 ```
@@ -184,20 +184,6 @@ autopilot-cli/
 │       └── sec_edgar.py        # SEC EDGAR 13F fetcher
 ├── pyproject.toml
 └── README.md
-```
-
-## Development
-
-```bash
-# Install in editable mode
-pip install -e .
-
-# Run tests
-python3 test_capitol.py
-python3 test_sec.py
-
-# Run CLI directly
-python3 -m autopilot_cli.main --help
 ```
 
 ## Requirements
