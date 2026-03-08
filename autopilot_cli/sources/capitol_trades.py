@@ -318,9 +318,38 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
         raise Exception(f"Failed to fetch trades for {politician_slug}: {str(e)}")
 
 
+async def _resolve_issuer_id(ticker: str) -> str | None:
+    """
+    Resolve a stock ticker to a Capitol Trades issuer ID by searching the issuers page.
+    
+    Args:
+        ticker: Stock ticker symbol (e.g., 'NVDA')
+        
+    Returns:
+        Issuer ID string or None if not found
+    """
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        try:
+            url = f"https://www.capitoltrades.com/issuers?search={ticker.upper()}"
+            await page.goto(url, wait_until="networkidle", timeout=30000)
+            link = await page.query_selector(f'a[href*="/issuers/"]')
+            if link:
+                href = await link.get_attribute("href")
+                if href:
+                    return href.split("/")[-1]
+            return None
+        finally:
+            await browser.close()
+
+
 async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -> list[CongressionalTrade]:
     """
     Fetch trades by ticker using Playwright for client-side rendering.
+    
+    First resolves the ticker to a Capitol Trades issuer ID, then fetches
+    trades filtered by that issuer.
     
     Args:
         ticker: Stock ticker symbol
@@ -329,11 +358,16 @@ async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -
     Returns:
         List of CongressionalTrade objects
     """
+    # Resolve ticker to issuer ID first
+    issuer_id = await _resolve_issuer_id(ticker)
+    if not issuer_id:
+        return []
+    
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
-        url = f"https://www.capitoltrades.com/trades?issueTicker={ticker.upper()}&pageSize={page_size}"
+        url = f"https://www.capitoltrades.com/trades?issuer={issuer_id}&pageSize={page_size}"
         
         try:
             await page.goto(url, wait_until="networkidle", timeout=30000)
@@ -428,8 +462,10 @@ def fetch_trades_by_ticker(ticker: str, page_size: int = 20) -> list[Congression
         except Exception as e:
             print(f"Warning: Playwright fetch failed, falling back to HTTP: {e}")
     
-    # Fallback to HTTP-based approach
-    url = f"https://www.capitoltrades.com/trades?issueTicker={ticker.upper()}&pageSize={page_size}"
+    # Fallback to HTTP-based approach (note: this likely won't work well since
+    # Capitol Trades is a client-side rendered SPA, but we try anyway)
+    # We can't resolve issuer ID without Playwright, so fall back to generic URL
+    url = f"https://www.capitoltrades.com/trades?pageSize={page_size}"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -522,7 +558,11 @@ def _name_to_slug(name: str) -> str:
 
 
 def _fetch_politicians_dynamic() -> list[Politician]:
-    """Fetch the full politician list from Capitol Trades (paginated)."""
+    """Fetch the full politician list from Capitol Trades (paginated).
+
+    Queries senate and house chamber filters separately so each politician
+    is tagged with the correct chamber.
+    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -531,58 +571,59 @@ def _fetch_politicians_dynamic() -> list[Politician]:
     politicians: list[Politician] = []
     seen_ids: set[str] = set()
 
-    for page in range(1, 20):  # safety cap
-        try:
-            response = _get_with_retry(
-                f"https://www.capitoltrades.com/politicians?page={page}&pageSize=100",
-                headers,
-            )
-        except Exception:
-            break
-
-        soup = BeautifulSoup(response.text, "lxml")
-        links = soup.find_all("a", href=re.compile(r"/politicians/[A-Z]"))
-
-        if not links:
-            break
-
-        for link in links:
-            href = link.get("href", "")
-            bioguide = href.split("/")[-1]
-            if bioguide in seen_ids:
-                continue
-            seen_ids.add(bioguide)
-
-            text = link.get_text(strip=True)
-            # Pattern: NamePartyState...
-            m = re.match(
-                r"^(.+?)(Democrat|Republican|Independent)(.+?)(?:Trades?\d|$)", text
-            )
-            if m:
-                name = m.group(1).strip()
-                party = m.group(2).strip()
-            else:
-                name = text[:60].strip()
-                party = None
-
-            # Extract trade count if present
-            tc = re.search(r"Trades?(\d+)", text)
-            trade_count = int(tc.group(1)) if tc else 0
-
-            slug = _name_to_slug(name)
-
-            politicians.append(
-                Politician(
-                    name=name,
-                    slug=slug,
-                    party=party,
-                    chamber=None,
-                    trade_count=trade_count,
+    for chamber_value, chamber_label in [("senate", "Senate"), ("house", "House")]:
+        for page in range(1, 20):  # safety cap
+            try:
+                response = _get_with_retry(
+                    f"https://www.capitoltrades.com/politicians?chamber={chamber_value}&page={page}&pageSize=100",
+                    headers,
                 )
-            )
+            except Exception:
+                break
 
-        if len(links) < 100:
-            break
+            soup = BeautifulSoup(response.text, "lxml")
+            links = soup.find_all("a", href=re.compile(r"/politicians/[A-Z]"))
+
+            if not links:
+                break
+
+            for link in links:
+                href = link.get("href", "")
+                bioguide = href.split("/")[-1]
+                if bioguide in seen_ids:
+                    continue
+                seen_ids.add(bioguide)
+
+                text = link.get_text(strip=True)
+                # Pattern: NamePartyState...
+                m = re.match(
+                    r"^(.+?)(Democrat|Republican|Independent)(.+?)(?:Trades?\d|$)", text
+                )
+                if m:
+                    name = m.group(1).strip()
+                    party = m.group(2).strip()
+                else:
+                    name = text[:60].strip()
+                    party = None
+
+                # Extract trade count if present
+                tc = re.search(r"Trades?(\d+)", text)
+                trade_count = int(tc.group(1)) if tc else 0
+
+                slug = _name_to_slug(name)
+
+                politicians.append(
+                    Politician(
+                        name=name,
+                        slug=slug,
+                        party=party,
+                        chamber=chamber_label,
+                        trade_count=trade_count,
+                    )
+                )
+
+            if len(links) < 100:
+                break
 
     return politicians
 
