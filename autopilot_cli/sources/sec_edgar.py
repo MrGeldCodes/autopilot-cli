@@ -173,7 +173,7 @@ def fetch_13f_filings(manager_slug: str) -> Optional[Filing13F]:
                     name_of_issuer=name_of_issuer.get_text(strip=True),
                     title_of_class=title_of_class.get_text(strip=True) if title_of_class else "COM",
                     cusip=cusip.get_text(strip=True),
-                    value=int(value.get_text(strip=True)) * 1000,  # Value is in thousands
+                    value=int(value.get_text(strip=True)),  # SEC 13F values in thousands of dollars; already in correct units
                     shares=int(shares.get_text(strip=True)) if shares else 0,
                 )
 
