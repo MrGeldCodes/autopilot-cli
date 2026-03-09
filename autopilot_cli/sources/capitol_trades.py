@@ -114,6 +114,20 @@ def _slug_to_bioguide(slug: str) -> Optional[str]:
     return bioguide
 
 
+async def _block_non_essential_resources(page) -> None:
+    """Block images, fonts, CSS, and media to speed up page loads.
+    
+    Capitol Trades data is pure JSON rendered via JS — we only need
+    scripts and XHR/fetch requests. Everything else is wasted bandwidth.
+    """
+    await page.route(
+        "**/*",
+        lambda route: route.abort()
+        if route.request.resource_type in {"image", "stylesheet", "font", "media"}
+        else route.continue_(),
+    )
+
+
 async def _fetch_politician_trades_playwright(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
     """
     Fetch trades using Playwright for client-side rendering.
@@ -132,12 +146,17 @@ async def _fetch_politician_trades_playwright(politician_slug: str, page_size: i
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
+        await _block_non_essential_resources(page)
         
         url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
         
         try:
-            await page.goto(url, wait_until="load", timeout=30000)
-            await asyncio.sleep(2)  # Wait for data to load
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Wait for actual data rows instead of sleeping blindly
+            try:
+                await page.wait_for_selector("tbody tr", timeout=10000)
+            except Exception:
+                pass  # No rows found — will return empty list below
             
             # Extract table data from page
             rows_data = await page.evaluate('''() => {
@@ -342,10 +361,15 @@ async def _resolve_issuer_id(ticker: str) -> str | None:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
+        await _block_non_essential_resources(page)
         try:
             url = f"https://www.capitoltrades.com/issuers?search={ticker.upper()}"
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            link = await page.query_selector(f'a[href*="/issuers/"]')
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            try:
+                await page.wait_for_selector('a[href*="/issuers/"]', timeout=8000)
+            except Exception:
+                pass
+            link = await page.query_selector('a[href*="/issuers/"]')
             if link:
                 href = await link.get_attribute("href")
                 if href:
@@ -377,12 +401,17 @@ async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
+        await _block_non_essential_resources(page)
         
         url = f"https://www.capitoltrades.com/trades?issuer={issuer_id}&pageSize={page_size}"
         
         try:
-            await page.goto(url, wait_until="networkidle", timeout=30000)
-            await asyncio.sleep(2)  # Wait for data to load
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Wait for data rows instead of sleeping blindly
+            try:
+                await page.wait_for_selector("tbody tr", timeout=10000)
+            except Exception:
+                pass
             
             # Extract table data from page
             rows_data = await page.evaluate('''() => {
