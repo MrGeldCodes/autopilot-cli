@@ -116,9 +116,9 @@ def _slug_to_bioguide(slug: str) -> Optional[str]:
 
 async def _block_non_essential_resources(page) -> None:
     """Block images, fonts, CSS, and media to speed up page loads.
-    
-    Capitol Trades data is pure JSON rendered via JS — we only need
-    scripts and XHR/fetch requests. Everything else is wasted bandwidth.
+
+    Capitol Trades data is pure JS-rendered JSON — we only need
+    scripts and XHR/fetch. Everything else is wasted bandwidth.
     """
     await page.route(
         "**/*",
@@ -128,104 +128,134 @@ async def _block_non_essential_resources(page) -> None:
     )
 
 
-async def _fetch_politician_trades_playwright(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
+async def _extract_rows(page) -> list[dict]:
+    """Extract table rows from a loaded Capitol Trades page."""
+    return await page.evaluate('''() => {
+        const rows = document.querySelectorAll('tbody tr');
+        return Array.from(rows).map(tr => ({
+            cells: Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
+        }));
+    }''')
+
+
+def _parse_rows_to_trades(rows_data: list[dict], fallback_name: str) -> list[CongressionalTrade]:
+    """Parse raw table row data into CongressionalTrade objects.
+
+    Shared by both the politician and ticker fetch paths.
     """
-    Fetch trades using Playwright for client-side rendering.
-    
-    Args:
-        politician_slug: URL-friendly name
-        page_size: Number of trades to fetch
-        
-    Returns:
-        List of CongressionalTrade objects
+    trades = []
+    for row_data in rows_data:
+        cells = row_data["cells"]
+        if len(cells) < 7 or "No results" in cells[0]:
+            continue
+
+        politician_text = cells[0]
+        politician_name = politician_text.split("\n")[0].strip()
+
+        party = None
+        chamber = None
+        if "Republican" in politician_text:
+            party = "Republican"
+        elif "Democrat" in politician_text:
+            party = "Democrat"
+        if "Senate" in politician_text:
+            chamber = "Senate"
+        elif "House" in politician_text:
+            chamber = "House"
+
+        asset_text = cells[1]
+        asset_description = asset_text.split("\n")[0].strip()
+        ticker_match = re.search(r"([A-Z]{1,5}):US", asset_text)
+        ticker = ticker_match.group(1) if ticker_match else None
+
+        disc_date_str = cells[2].replace("\n", " ").strip()
+        disclosure_date = parse_date(disc_date_str)
+
+        trans_date_str = cells[3].replace("\n", " ").strip()
+        transaction_date = parse_date(trans_date_str)
+
+        trade_type_text = cells[6].lower().strip()
+        trade_type = (
+            "Purchase" if trade_type_text == "buy"
+            else "Sale" if trade_type_text == "sell"
+            else trade_type_text.capitalize()
+        )
+
+        amount = cells[7] if len(cells) > 7 else ""
+
+        trades.append(CongressionalTrade(
+            politician=politician_name or fallback_name,
+            transaction_date=transaction_date,
+            disclosure_date=disclosure_date,
+            ticker=ticker,
+            asset_description=asset_description,
+            trade_type=trade_type,
+            amount=amount,
+            party=party,
+            chamber=chamber,
+        ))
+    return trades
+
+
+async def _fetch_politician_with_browser(
+    browser, politician_slug: str, page_size: int = 20
+) -> list[CongressionalTrade]:
+    """Fetch one politician's trades using an *existing* browser instance.
+
+    Each call opens a new page on the shared browser and closes it when done.
+    This avoids the 1-2s browser startup cost on every request.
     """
     bioguide = _slug_to_bioguide(politician_slug)
     if not bioguide:
         return []
-    
+
+    page = await browser.new_page()
+    await _block_non_essential_resources(page)
+
+    url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        try:
+            await page.wait_for_selector("tbody tr", timeout=10000)
+        except Exception:
+            pass
+        rows_data = await _extract_rows(page)
+        return _parse_rows_to_trades(rows_data, politician_slug.replace("-", " ").title())
+    finally:
+        await page.close()
+
+
+async def _fetch_many_politicians_playwright(
+    politician_slugs: list[str], page_size: int = 20
+) -> dict[str, list[CongressionalTrade]]:
+    """Fetch multiple politicians concurrently using a single browser.
+
+    Spins up one Chromium instance, opens N pages in parallel, closes browser
+    when all are done. This is the fastest possible approach when fetching
+    more than one politician in a single session.
+    """
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        await _block_non_essential_resources(page)
-        
-        url = f"https://www.capitoltrades.com/trades?politician={bioguide}&pageSize={page_size}"
-        
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            # Wait for actual data rows instead of sleeping blindly
-            try:
-                await page.wait_for_selector("tbody tr", timeout=10000)
-            except Exception:
-                pass  # No rows found — will return empty list below
-            
-            # Extract table data from page
-            rows_data = await page.evaluate('''() => {
-                const rows = document.querySelectorAll('tbody tr');
-                return Array.from(rows).map(tr => ({
-                    cells: Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-                }));
-            }''')
-            
-            trades = []
-            
-            for row_data in rows_data:
-                cells = row_data['cells']
-                
-                # Skip if "No results" or insufficient cells
-                if len(cells) < 7 or "No results" in cells[0]:
-                    continue
-                
-                # Parse cell contents (same structure as HTML version)
-                politician_text = cells[0]
-                politician_name = politician_text.split('\n')[0].strip()
-                
-                party = None
-                chamber = None
-                if "Republican" in politician_text:
-                    party = "Republican"
-                elif "Democrat" in politician_text:
-                    party = "Democrat"
-                if "Senate" in politician_text:
-                    chamber = "Senate"
-                elif "House" in politician_text:
-                    chamber = "House"
-                
-                # Asset and ticker
-                asset_text = cells[1]
-                asset_description = asset_text.split('\n')[0].strip()
-                
-                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
-                ticker = ticker_match.group(1) if ticker_match else None
-                
-                # Dates - handle multi-line format
-                disc_date_str = cells[2].replace('\n', ' ').strip()
-                disclosure_date = parse_date(disc_date_str)
-                
-                trans_date_str = cells[3].replace('\n', ' ').strip()
-                transaction_date = parse_date(trans_date_str)
-                
-                # Trade type (column 6)
-                trade_type_text = cells[6].lower().strip()
-                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
-                
-                # Amount (column 7)
-                amount = cells[7] if len(cells) > 7 else ""
-                
-                trade = CongressionalTrade(
-                    politician=politician_name or politician_slug.replace("-", " ").title(),
-                    transaction_date=transaction_date,
-                    disclosure_date=disclosure_date,
-                    ticker=ticker,
-                    asset_description=asset_description,
-                    trade_type=trade_type,
-                    amount=amount,
-                    party=party,
-                    chamber=chamber,
-                )
-                
-                trades.append(trade)
-            
-            return trades
+            tasks = [
+                _fetch_politician_with_browser(browser, slug, page_size)
+                for slug in politician_slugs
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return {
+                slug: (result if not isinstance(result, Exception) else [])
+                for slug, result in zip(politician_slugs, results)
+            }
+        finally:
+            await browser.close()
+
+
+async def _fetch_politician_trades_playwright(politician_slug: str, page_size: int = 20) -> list[CongressionalTrade]:
+    """Single-politician fetch. Uses its own browser (for standalone calls)."""
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            return await _fetch_politician_with_browser(browser, politician_slug, page_size)
         finally:
             await browser.close()
 
@@ -348,6 +378,38 @@ def fetch_politician_trades(politician_slug: str, page_size: int = 20) -> list[C
         raise Exception(f"Failed to fetch trades for {politician_slug}: {str(e)}")
 
 
+def fetch_multiple_politicians(
+    politician_slugs: list[str], page_size: int = 20
+) -> dict[str, list[CongressionalTrade]]:
+    """Fetch trades for multiple politicians in one shot — fastest production method.
+
+    Spins up a single Chromium browser, opens all politician pages concurrently,
+    and closes the browser when done. Compared to calling fetch_politician_trades()
+    N times, this saves (N-1) * browser startup time (~1-2s each).
+
+    Args:
+        politician_slugs: List of URL-friendly names (e.g., ['nancy-pelosi', 'tuberville'])
+        page_size: Number of trades per politician
+
+    Returns:
+        Dict mapping slug -> list of CongressionalTrade objects.
+        Failed slugs return an empty list (no exception raised).
+
+    Example:
+        results = fetch_multiple_politicians(['nancy-pelosi', 'tommy-tuberville', 'dan-crenshaw'])
+        pelosi_trades = results['nancy-pelosi']
+    """
+    if not politician_slugs:
+        return {}
+    if PLAYWRIGHT_AVAILABLE:
+        try:
+            return asyncio.run(_fetch_many_politicians_playwright(politician_slugs, page_size))
+        except Exception as e:
+            print(f"Warning: concurrent Playwright fetch failed, falling back to serial: {e}")
+    # Fallback: serial single fetches
+    return {slug: fetch_politician_trades(slug, page_size) for slug in politician_slugs}
+
+
 async def _resolve_issuer_id(ticker: str) -> str | None:
     """
     Resolve a stock ticker to a Capitol Trades issuer ID by searching the issuers page.
@@ -407,78 +469,17 @@ async def _fetch_trades_by_ticker_playwright(ticker: str, page_size: int = 20) -
         
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            # Wait for data rows instead of sleeping blindly
             try:
                 await page.wait_for_selector("tbody tr", timeout=10000)
             except Exception:
                 pass
-            
-            # Extract table data from page
-            rows_data = await page.evaluate('''() => {
-                const rows = document.querySelectorAll('tbody tr');
-                return Array.from(rows).map(tr => ({
-                    cells: Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim())
-                }));
-            }''')
-            
-            trades = []
-            
-            for row_data in rows_data:
-                cells = row_data['cells']
-                
-                # Skip if "No results" or insufficient cells
-                if len(cells) < 7 or "No results" in cells[0]:
-                    continue
-                
-                # Parse cell contents
-                politician_text = cells[0]
-                politician_name = politician_text.split('\n')[0].strip()
-                
-                party = None
-                chamber = None
-                if "Republican" in politician_text:
-                    party = "Republican"
-                elif "Democrat" in politician_text:
-                    party = "Democrat"
-                if "Senate" in politician_text:
-                    chamber = "Senate"
-                elif "House" in politician_text:
-                    chamber = "House"
-                
-                # Asset
-                asset_text = cells[1]
-                asset_description = asset_text.split('\n')[0].strip()
-                
-                ticker_match = re.search(r'([A-Z]{1,5}):US', asset_text)
-                extracted_ticker = ticker_match.group(1) if ticker_match else ticker.upper()
-                
-                # Dates
-                disc_date_str = cells[2].replace('\n', ' ').strip()
-                disclosure_date = parse_date(disc_date_str)
-                
-                trans_date_str = cells[3].replace('\n', ' ').strip()
-                transaction_date = parse_date(trans_date_str)
-                
-                # Type and amount
-                trade_type_text = cells[6].lower().strip()
-                trade_type = "Purchase" if trade_type_text == "buy" else "Sale" if trade_type_text == "sell" else trade_type_text.capitalize()
-                
-                amount = cells[7] if len(cells) > 7 else ""
-                
-                trade = CongressionalTrade(
-                    politician=politician_name,
-                    transaction_date=transaction_date,
-                    disclosure_date=disclosure_date,
-                    ticker=extracted_ticker,
-                    asset_description=asset_description,
-                    trade_type=trade_type,
-                    amount=amount,
-                    party=party,
-                    chamber=chamber,
-                )
-                
-                trades.append(trade)
-            
+            rows_data = await _extract_rows(page)
+            trades = _parse_rows_to_trades(rows_data, ticker.upper())
+            # For ticker-filtered pages, fall back to the searched ticker when
+            # the :US pattern didn't match (e.g. ETFs, unusual formats)
+            for t in trades:
+                if t.ticker is None:
+                    t.ticker = ticker.upper()
             return trades
         finally:
             await browser.close()
